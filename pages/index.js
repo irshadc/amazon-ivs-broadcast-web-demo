@@ -31,6 +31,7 @@ const MIC_LAYER_NAME = 'mic';
 export default function Broadcast() {
   const client = useRef(null);
   const canvasRef = useRef(null);
+  const wbRef = useRef(null);
   const channelType = useRef('STANDARD');
 
   // By default, initialize the stream canvas at 720p resolution.
@@ -298,6 +299,86 @@ export default function Broadcast() {
         'Error: Failed to add a layer to the canvas. If the problem persists, try refreshing the app.'
       );
     }
+    try {  
+      wbRef.current.width = canvas.width;
+      wbRef.current.height = canvas.height;
+
+      const ctx = wbRef.current.getContext("2d");
+      ctx.lineWidth=1;
+      ctx.strokeStyle = "#FF0000";
+
+      const wbLayer = {
+        name: 'whiteboard',
+        imageSrc: wbRef.current,
+        index: 5,
+        x: 0,
+        y: 0,
+        width: canvas.width,
+        height: canvas.height,
+        type: 'CANVAS',
+      };
+
+      const canvasRect = wbRef.current.getClientRects()[0];
+
+      const handleDrawing = async (evt) => {
+
+        
+        
+        if(evt.type =='mousedown') {
+          ctx.beginPath();
+          ctx.moveTo(evt.x,evt.y);
+          
+        } else if (evt.type =='mousemove') {
+          ctx.lineTo(evt.x,evt.y);
+          ctx.stroke();
+        } else if (evt.type =='dblclick') {
+          ctx.clearRect(0,0,canvas.width,canvas.height);
+        } else { //mouseup
+          ctx.closePath();
+        }
+        await addLayer(wbLayer, client.current);
+      };
+
+      const recalculate = (event,eventType) => {
+        const mx = event.clientX - canvasRect.left;
+        const my = event.clientY - canvasRect.top;
+
+        return  { x: mx, y: my, type: eventType };        
+      }
+
+      const handleMouseDown = (event) => {
+        window.isDrawing = true;
+        const evt = recalculate(event,'mousedown');
+        handleDrawing(evt);
+      };
+      const handleMouseMove = (event) => {
+        if(window.isDrawing) {
+          const evt = recalculate(event,'mousemove');
+          handleDrawing(evt);
+        }
+      };
+      const handleMouseUp = (event) => {
+        window.isDrawing = false;
+        const evt = recalculate(event,'mouseup');
+        handleDrawing(evt);
+      };
+
+      const handleDblClick = (event) => {
+        window.isDrawing = false;
+        const evt = recalculate(event,'dblclick');
+        handleDrawing(evt);
+      };
+
+      wbRef.current.addEventListener('mousedown', handleMouseDown);
+      wbRef.current.addEventListener('mousemove', handleMouseMove);
+      wbRef.current.addEventListener('mouseup', handleMouseUp);
+      wbRef.current.addEventListener('dblclick', handleDblClick);
+
+    } catch (err) {
+      handleError(
+        'Error: Failed to add whiteboard layer in the canvas. If the problem persists, try refreshing the app.'
+      );
+    }
 
     try {
       // Get video devices
@@ -533,6 +614,7 @@ export default function Broadcast() {
         <div className={styles.streamPreview}>
           <StreamPreview
             canvasRef={canvasRef}
+            wbRef={wbRef}
             videoPermissions={devicePermissions.video}
           />
         </div>

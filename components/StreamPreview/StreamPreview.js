@@ -1,7 +1,7 @@
 import styles from './StreamPreview.module.css';
 import Icon from '../Icon';
 
-export default function StreamPreview({ videoPermissions, canvasRef }) {
+export default function StreamPreview({ videoPermissions, canvasRef, wbRef }) {
   return (
     <div className={styles.streamPreviewContainer}>
       <div className={styles.streamPreview}>
@@ -10,6 +10,12 @@ export default function StreamPreview({ videoPermissions, canvasRef }) {
           id='cam-video-preview'
           className={styles.streamPreviewVideo}
           ref={canvasRef}
+        ></canvas>
+        <canvas
+          key='WHITEBOARD_PREVIEW'
+          id='wb-preview'
+          className={styles.streamPreviewVideo}
+          ref={wbRef}
         ></canvas>
         {videoPermissions ? (
           <></>

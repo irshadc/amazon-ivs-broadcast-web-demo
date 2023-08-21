@@ -60,6 +60,9 @@ const useLayers = (initialLayer) => {
         case 'IMAGE':
           await addImageLayer(layer, client);
           break;
+        case 'CANVAS':
+          await addImageCanvasLayer(layer, client);
+          break;
         default:
           break;
       }
@@ -151,6 +154,25 @@ const useLayers = (initialLayer) => {
     }
   };
 
+  // Adds a canvas layer
+  const addImageCanvasLayer = async (layer, client) => {
+    try {
+      const { name, imageSrc, type, ...layerProps } = layer;
+
+      // If a layer with the same name is already added, throw an error
+      if (client.getVideoInputDevice(layer.name)) {
+        await removeLayer(layer, client);
+        await updateSDKLayer(layer, client);
+      }
+
+      const img = imageSrc;
+      await client.addImageSource(img, name, layerProps);
+      setLayers((prevState) => [...prevState, layer]);
+    } catch (err) {
+      throw Error(err);
+    }
+  };
+
   // Remove layer
   // Removes a layer from the layer array and removes it from the canvas
   const removeLayer = async (layer, client) => {
@@ -178,6 +200,9 @@ const useLayers = (initialLayer) => {
           await client.removeVideoInputDevice(name);
           break;
         case 'IMAGE':
+          await client.removeImage(name);
+          break;
+        case 'CANVAS':
           await client.removeImage(name);
           break;
         default:
