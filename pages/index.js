@@ -69,6 +69,7 @@ export default function Broadcast() {
 
   const [camMuted, setCamMuted] = useState(false);
   const [micMuted, setMicMuted] = useState(false);
+  const [isWhiteboardActive, setWhiteboardActive] = useState(true);
 
   const [settingsModalActive, toggleSettingsModal] = useModal();
   const [aboutModalActive, toggleAboutModal] = useModal();
@@ -228,6 +229,28 @@ export default function Broadcast() {
     }
   };
 
+  const handleWhiteboarding = async() => {
+    // If the SDK client is not available, throw an error
+    if (!client.current) {
+      handleError(`Whiteboarding error: Broadcast SDK is not available.`);
+      return;
+    }
+
+    const canvas = client.current.getCanvasDimensions();
+
+    // Toggle the state of the active screen share
+    try {
+      if (isWhiteboardActive) {
+        setWhiteboardActive(false);
+      } else {
+        //wbRef.current.removeAttribute("hidden");
+        setWhiteboardActive(true);
+      }
+    } catch (err) {
+      handleError(`Whiteboarding error: ${err.message}`);
+    }
+  };
+
   const getVideoDevices = async () => {
     try {
       const devices = await navigator.mediaDevices.enumerateDevices();
@@ -318,6 +341,7 @@ export default function Broadcast() {
         type: 'CANVAS',
       };
 
+
       const canvasRect = wbRef.current.getClientRects()[0];
 
       const handleDrawing = async (evt) => {
@@ -367,6 +391,7 @@ export default function Broadcast() {
         window.isDrawing = false;
         const evt = recalculate(event,'dblclick');
         handleDrawing(evt);
+
       };
 
       wbRef.current.addEventListener('mousedown', handleMouseDown);
@@ -379,7 +404,8 @@ export default function Broadcast() {
         'Error: Failed to add whiteboard layer in the canvas. If the problem persists, try refreshing the app.'
       );
     }
-
+    
+    
     try {
       // Get video devices
       var vd = await getVideoDevices(client.current);
@@ -394,6 +420,8 @@ export default function Broadcast() {
         'Error: Could not find any available video or audio devices. Please ensure that a camera or microphone is attached to your device, and your privacy settings allow this app access them.'
       );
     }
+
+
 
     // Fetch saved devices from localstorage
     const savedVideoDeviceId = localStorage.getItem('savedVideoDeviceId');
@@ -569,6 +597,33 @@ export default function Broadcast() {
     }
   }, [router.query]);
 
+
+  
+  useEffect(() => { (async function () {
+
+    // We import this here so that it's only loaded during client-side rendering.
+    const pdfJS = await import('pdfjs-dist/build/pdf');
+    const pdfJSWoker = await import ('pdfjs-dist/build/pdf.worker.entry');
+    
+    pdfJS.GlobalWorkerOptions.workerSrc = window.location.origin + '/pdf.worker.min.js';
+    
+    const pdf = await pdfJS.getDocument("/assets/adda247-testing.pdf").promise;
+
+    const page = await pdf.getPage(1);
+    const viewport = page.getViewport({ scale: 1.0 });
+
+    // Prepare canvas using PDF page dimensions.
+    const wr = wbRef.current;
+    const canvasContext = wr.getContext('2d');
+    wr.height = viewport.height;
+    wr.width = viewport.width;
+
+    // Render PDF page into canvas context.
+    const renderContext = { canvasContext, viewport };
+    page.render(renderContext);
+    })();
+  }, []);
+
   return (
     <>
       <div className={styles.broadcastWrapper}>
@@ -611,13 +666,22 @@ export default function Broadcast() {
             streamResolution={streamResolution.current}
           />
         </div>
+        {isWhiteboardActive ? (
         <div className={styles.streamPreview}>
           <StreamPreview
             canvasRef={canvasRef}
+            isWhiteboardActive={isWhiteboardActive}
             wbRef={wbRef}
             videoPermissions={devicePermissions.video}
           />
-        </div>
+        </div>) :
+        ( <div className={styles.streamPreview}>
+          <Whiteboard
+            canvasRef={canvasRef}
+            isWhiteboardActive={isWhiteboardActive}
+            wbRef={wbRef}
+            videoPermissions={devicePermissions.video}
+          /></div>) }
         <div className={styles.controlBar}>
           <div className={styles.controlBarLeft}></div>
           <div className={styles.controlBarCenter}>
@@ -628,7 +692,9 @@ export default function Broadcast() {
               isDesktop={isDesktop}
               micMuted={micMuted}
               camMuted={camMuted}
+              isWhiteboardActive={isWhiteboardActive}
               screenShareActive={captureStream?.active}
+              handleWhiteboarding={handleWhiteboarding}
               handleScreenShare={handleScreenShare}
               handleSettings={handleSettings}
               handleMicMute={handleMicMute}
