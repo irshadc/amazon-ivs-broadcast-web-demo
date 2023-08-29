@@ -5,12 +5,6 @@ export default function StreamPreview({ videoPermissions, canvasRef, wbRef,isWhi
   return (
     <div className={styles.streamPreviewContainer}>
       <div className={styles.streamPreview}>
-        <canvas
-          key='STREAM_PREVIEW_VIDEO'
-          id='cam-video-preview'
-          className={styles.streamPreviewVideo}
-          ref={canvasRef}
-        ></canvas>
         {isWhiteboardActive ? (<canvas
           key='WHITEBOARD_PREVIEW'
           id='wb-preview'
@@ -23,6 +17,12 @@ export default function StreamPreview({ videoPermissions, canvasRef, wbRef,isWhi
         hidden="hidden"
         ref={wbRef} ></canvas>
        }
+       <canvas
+          key='STREAM_PREVIEW_VIDEO'
+          id='cam-video-preview'
+          className={styles.streamPreviewVideo}
+          ref={canvasRef}
+        ></canvas>
         {videoPermissions ? (
           <></>
         ) : (

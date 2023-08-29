@@ -25,6 +25,9 @@ import AlertBox, { useAlertBox } from '../components/AlertBox';
 import { getConfigFromResolution } from '../components/Helpers';
 import useStream from '../components/Stream';
 
+import * as pdfJSLib from 'pdfjs-dist/build/pdf';
+import * as pdfJSWorker from 'pdfjs-dist/build/pdf.worker.entry';
+    
 const CAM_LAYER_NAME = 'camera';
 const MIC_LAYER_NAME = 'mic';
 
@@ -70,6 +73,7 @@ export default function Broadcast() {
   const [camMuted, setCamMuted] = useState(false);
   const [micMuted, setMicMuted] = useState(false);
   const [isWhiteboardActive, setWhiteboardActive] = useState(true);
+  var [pageNum,setPageNum] = useState(1);
 
   const [settingsModalActive, toggleSettingsModal] = useModal();
   const [aboutModalActive, toggleAboutModal] = useModal();
@@ -158,10 +162,11 @@ export default function Broadcast() {
     };
 
     // captureStream?.active will be truthy if screensharing is active.
-    if (captureStream?.active) {
+    if (captureStream?.active || isWhiteboardActive) {
       const padding = 20;
       camLayer = {
         ...camLayer,
+        index: 4,
         x: canvas.width - canvas.width / 4 - padding,
         y: canvas.height - canvas.height / 4 - padding,
         width: canvas.width / 4,
@@ -229,6 +234,8 @@ export default function Broadcast() {
     }
   };
 
+  var pdfDoc = null, pageNumPending = null, pageRendering = false;
+
   const handleWhiteboarding = async() => {
     // If the SDK client is not available, throw an error
     if (!client.current) {
@@ -240,16 +247,93 @@ export default function Broadcast() {
 
     // Toggle the state of the active screen share
     try {
-      if (isWhiteboardActive) {
-        setWhiteboardActive(false);
-      } else {
-        //wbRef.current.removeAttribute("hidden");
-        setWhiteboardActive(true);
-      }
+      setWhiteboardActive(!isWhiteboardActive);
     } catch (err) {
       handleError(`Whiteboarding error: ${err.message}`);
     }
   };
+
+  const loadPrevPage = async() => {
+    setPageNum(--pageNum);
+    queueRenderPage(pageNum);
+  };
+
+  const loadNextPage = async() => {
+    setPageNum(++pageNum);
+    queueRenderPage(pageNum);
+  };
+
+  
+
+  const loadPdfDoc = async() => {
+    pdfJSLib.GlobalWorkerOptions.workerSrc = pdfJSWorker;
+    pdfDoc = await pdfJSLib.getDocument("/assets/adda247-testing.pdf").promise;
+    setPageNum(1);
+    queueRenderPage(pageNum);
+  };
+
+  function queueRenderPage(num) {
+    if (pageRendering) {
+      pageNumPending = num;
+    } else {
+      renderPage(num);
+    }
+  }
+
+  const renderPage = async(pageNum) => {
+    pageRendering = true;
+    // Prepare canvas using PDF page dimensions.
+    try {
+      const wbr =  wbRef.current;
+      const canvasContext = wbr.getContext('2d');
+      if(pdfDoc==null) {
+        pdfDoc = await pdfJSLib.getDocument("/assets/adda247-testing.pdf").promise;
+      }
+      const page = await pdfDoc.getPage(pageNum);
+      // Render PDF page into canvas context.
+      const viewport = page.getViewport({ scale: 1.0 });
+
+      //wbr.width = viewport.width;
+      //wbr.height = viewport.height;
+
+      const renderContext = { canvasContext, viewport };
+      
+      var renderTask = page.render(renderContext);
+
+      // Wait for rendering to finish
+      renderTask.promise.then(function() {
+        console.log("completeed "+pageNum);
+        pageRendering = false;
+        if (pageNumPending !== null) {
+          // New page rendering is pending
+          renderPage(pageNumPending);
+          pageNumPending = null;
+        }
+        const wbLayer = {
+          name: 'whiteboard',
+          imageSrc: wbRef.current,
+          index: 2,
+          x: 0,
+          y: 0,
+          width: wbr.width,
+          height: wbr.height,
+          type: 'CANVAS',
+        };
+        addLayer(wbLayer, client.current);
+      });
+    } catch (err) {
+      pageRendering = null;
+      console.log (err.name);
+      if ( err.name === 'RenderingCancelledException' ) {
+        queueRenderPage(pageNum);
+      } else {
+        console.log("some other error");
+      }
+    }
+
+  };
+
+
 
   const getVideoDevices = async () => {
     try {
@@ -333,7 +417,7 @@ export default function Broadcast() {
       const wbLayer = {
         name: 'whiteboard',
         imageSrc: wbRef.current,
-        index: 5,
+        index: 2,
         x: 0,
         y: 0,
         width: canvas.width,
@@ -363,11 +447,30 @@ export default function Broadcast() {
         await addLayer(wbLayer, client.current);
       };
 
-      const recalculate = (event,eventType) => {
-        const mx = event.clientX - canvasRect.left;
-        const my = event.clientY - canvasRect.top;
+      function getNumericStyleProperty(style, prop){
+          return parseInt(style.getPropertyValue(prop),10) ;
+      }
 
-        return  { x: mx, y: my, type: eventType };        
+      const recalculate = (event,eventType) => {
+        var e = event.target, x = 0, y = 0;
+        var inner = true ;
+        do {
+            x += e.offsetLeft;
+            y += e.offsetTop;
+            var style = window.getComputedStyle(e,null) ;
+            var borderTop = getNumericStyleProperty(style,"border-top-width") ;
+            var borderLeft = getNumericStyleProperty(style,"border-left-width") ;
+            y += borderTop ;
+            x += borderLeft ;
+            if (inner){
+              var paddingTop = getNumericStyleProperty(style,"padding-top") ;
+              var paddingLeft = getNumericStyleProperty(style,"padding-left") ;
+              y += paddingTop ;
+              x += paddingLeft ;
+            }
+            inner = false ;
+        } while (e = e.offsetParent);
+        return  { x: event.pageX - x, y: event.pageY - y, type: eventType };     
       }
 
       const handleMouseDown = (event) => {
@@ -394,10 +497,10 @@ export default function Broadcast() {
 
       };
 
-      wbRef.current.addEventListener('mousedown', handleMouseDown);
-      wbRef.current.addEventListener('mousemove', handleMouseMove);
-      wbRef.current.addEventListener('mouseup', handleMouseUp);
-      wbRef.current.addEventListener('dblclick', handleDblClick);
+      canvasRef.current.addEventListener('mousedown', handleMouseDown);
+      canvasRef.current.addEventListener('mousemove', handleMouseMove);
+      canvasRef.current.addEventListener('mouseup', handleMouseUp);
+      canvasRef.current.addEventListener('dblclick', handleDblClick);
 
     } catch (err) {
       handleError(
@@ -472,10 +575,11 @@ export default function Broadcast() {
     };
 
     // captureStream?.active is truthy if a screenshare is active.
-    if (captureStream?.active) {
+    if (captureStream?.active|| isWhiteboardActive) {
       const padding = 20;
       layer = {
         ...layer,
+        index: 4,
         x: canvas.width - canvas.width / 4 - padding,
         y: canvas.height - canvas.height / 4 - padding,
         width: canvas.width / 4,
@@ -597,33 +701,6 @@ export default function Broadcast() {
     }
   }, [router.query]);
 
-
-  
-  useEffect(() => { (async function () {
-
-    // We import this here so that it's only loaded during client-side rendering.
-    const pdfJS = await import('pdfjs-dist/build/pdf');
-    const pdfJSWoker = await import ('pdfjs-dist/build/pdf.worker.entry');
-    
-    pdfJS.GlobalWorkerOptions.workerSrc = window.location.origin + '/pdf.worker.min.js';
-    
-    const pdf = await pdfJS.getDocument("/assets/adda247-testing.pdf").promise;
-
-    const page = await pdf.getPage(1);
-    const viewport = page.getViewport({ scale: 1.0 });
-
-    // Prepare canvas using PDF page dimensions.
-    const wr = wbRef.current;
-    const canvasContext = wr.getContext('2d');
-    wr.height = viewport.height;
-    wr.width = viewport.width;
-
-    // Render PDF page into canvas context.
-    const renderContext = { canvasContext, viewport };
-    page.render(renderContext);
-    })();
-  }, []);
-
   return (
     <>
       <div className={styles.broadcastWrapper}>
@@ -676,7 +753,7 @@ export default function Broadcast() {
           />
         </div>) :
         ( <div className={styles.streamPreview}>
-          <Whiteboard
+          <StreamPreview
             canvasRef={canvasRef}
             isWhiteboardActive={isWhiteboardActive}
             wbRef={wbRef}
@@ -695,6 +772,9 @@ export default function Broadcast() {
               isWhiteboardActive={isWhiteboardActive}
               screenShareActive={captureStream?.active}
               handleWhiteboarding={handleWhiteboarding}
+              loadPrevPage={loadPrevPage}
+              loadPdfDoc={loadPdfDoc}
+              loadNextPage={loadNextPage}
               handleScreenShare={handleScreenShare}
               handleSettings={handleSettings}
               handleMicMute={handleMicMute}
