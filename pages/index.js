@@ -291,11 +291,12 @@ export default function Broadcast() {
       }
       const page = await pdfDoc.getPage(pageNum);
       // Render PDF page into canvas context.
-      const viewport = page.getViewport({ scale: 1.0 });
+      const viewport1 = page.getViewport({ scale: 1.0 });
 
-      //wbr.width = viewport.width;
-      //wbr.height = viewport.height;
+      let factX = wbr.width/viewport1.width;
+      const viewport = page.getViewport({ scale: factX });
 
+      
       const renderContext = { canvasContext, viewport };
       
       var renderTask = page.render(renderContext);
@@ -306,20 +307,20 @@ export default function Broadcast() {
         pageRendering = false;
         if (pageNumPending !== null) {
           // New page rendering is pending
-          renderPage(pageNumPending);
+          queueRenderPage(pageNumPending);
           pageNumPending = null;
         }
-        const wbLayer = {
-          name: 'whiteboard',
-          imageSrc: wbRef.current,
-          index: 2,
-          x: 0,
-          y: 0,
-          width: wbr.width,
-          height: wbr.height,
-          type: 'CANVAS',
-        };
-        addLayer(wbLayer, client.current);
+        // const wbLayer = {
+        //   name: 'whiteboard',
+        //   imageSrc: wbRef.current,
+        //   index: 2,
+        //   x: 0,
+        //   y: 0,
+        //   width: wbr.width,
+        //   height: wbr.height,
+        //   type: 'CANVAS',
+        // };
+        // addLayer(wbLayer, client.current);
       });
     } catch (err) {
       pageRendering = null;
@@ -414,18 +415,34 @@ export default function Broadcast() {
       ctx.lineWidth=1;
       ctx.strokeStyle = "#FF0000";
 
-      const wbLayer = {
+      // const wbLayer = {
+      //           name: 'whiteboard',
+      //   imageSrc: wbRef.current,
+      //   index: 2,
+      //   x: 0,
+      //   y: 0,
+      //   width: canvas.width,
+      //   height: canvas.height,
+      //   type: 'CANVAS',
+      // };
+
+      const canvasStream = wbRef.current.captureStream();
+
+      let wbLayer = {
+        stream: canvasStream,
         name: 'whiteboard',
-        imageSrc: wbRef.current,
-        index: 2,
+        index: 3,
+        visible: true,
         x: 0,
         y: 0,
-        width: canvas.width,
-        height: canvas.height,
+        width: wbRef.current.width,
+        height: wbRef.current.height,
         type: 'CANVAS',
       };
 
+      await addLayer(wbLayer, client.current);
 
+      
       const canvasRect = wbRef.current.getClientRects()[0];
 
       const handleDrawing = async (evt) => {
@@ -444,7 +461,7 @@ export default function Broadcast() {
         } else { //mouseup
           ctx.closePath();
         }
-        await addLayer(wbLayer, client.current);
+        // await addLayer(wbLayer, client.current);
       };
 
       function getNumericStyleProperty(style, prop){

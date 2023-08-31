@@ -30,6 +30,9 @@ const useLayers = (initialLayer) => {
       case 'IMAGE':
         updateSDKLayer(layer, client);
         break;
+      case 'CANVAS':
+        updateSDKLayer(layer, client);
+        break;
       default:
         break;
     }
@@ -61,7 +64,7 @@ const useLayers = (initialLayer) => {
           await addImageLayer(layer, client);
           break;
         case 'CANVAS':
-          await addImageCanvasLayer(layer, client);
+          await addScreenshareLayer(layer, client);
           break;
         default:
           break;
@@ -203,7 +206,8 @@ const useLayers = (initialLayer) => {
           await client.removeImage(name);
           break;
         case 'CANVAS':
-          await client.removeImage(name);
+          // await client.removeImage(name);
+          await client.removeVideoInputDevice(name);
           break;
         default:
           break;
